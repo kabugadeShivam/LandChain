@@ -1,0 +1,55 @@
+name: Update Frontend for Sepolia
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  update-frontend:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Update App.jsx for production Sepolia deployment
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("frontend/src/App.jsx")
+          content = path.read_text(encoding="utf-8")
+
+          replacements = {
+              'const API_URL = "http://127.0.0.1:8000";': 'const API_URL = "https://landchain-gxyi.onrender.com";',
+              '"0x5FbDB2315678afecb367f032d93F642f64180aa3";': '"0x0d4AbB070F0064cdf41dd3C1E3B503457786f116";',
+              'if (chainId !== "31337") {': 'if (chainId !== "11155111") {',
+              'Please switch MetaMask to Hardhat Local (Chain ID 31337) before registering the property.': 'Please switch MetaMask to Sepolia (Chain ID 11155111) before registering the property.',
+              'Your MetaMask wallet has no ETH on Hardhat Local. Import or use a funded Hardhat account to pay the local transaction gas.': 'Your MetaMask wallet has no Sepolia ETH. Please fund your Sepolia wallet to pay transaction gas.',
+              '{network || "Hardhat Local"}': '{network || "Sepolia"}',
+          }
+
+          for old, new in replacements.items():
+              if old not in content:
+                  raise SystemExit(f"Expected text not found: {old}")
+              content = content.replace(old, new, 1)
+
+          path.write_text(content, encoding="utf-8")
+          PY
+
+      - name: Commit updated App.jsx
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/App.jsx
+          if git diff --cached --quiet; then
+            echo "No frontend changes required."
+            exit 0
+          fi
+          git commit -m "Update frontend for Render and Sepolia"
+          git push
