@@ -18,88 +18,41 @@ from blockchain import (
 # SEPOLIA DEPLOYMENT WALLET
 # ============================================
 # The private key is NOT stored in this source file.
-#
 # It must be provided through the environment variable:
-#
 # SEPOLIA_PRIVATE_KEY
-#
-# Example in PowerShell:
-#
-# $env:SEPOLIA_PRIVATE_KEY="YOUR_PRIVATE_KEY"
-#
-# NEVER commit the private key to GitHub.
-# NEVER send the private key to anyone.
 # ============================================
 
 SEPOLIA_PRIVATE_KEY = os.getenv("SEPOLIA_PRIVATE_KEY")
 
 
 def get_backend_account():
-    """
-    Load the backend signing wallet from the
-    SEPOLIA_PRIVATE_KEY environment variable.
-    """
-
     if not SEPOLIA_PRIVATE_KEY:
         raise RuntimeError(
             "SEPOLIA_PRIVATE_KEY is not configured. "
-            "Set the private key in the environment before "
-            "starting the backend."
+            "Set the private key in the environment before starting the backend."
         )
 
     try:
-        account = w3.eth.account.from_key(
-            SEPOLIA_PRIVATE_KEY
-        )
-
-        return Web3.to_checksum_address(
-            account.address
-        )
-
+        account = w3.eth.account.from_key(SEPOLIA_PRIVATE_KEY)
+        return Web3.to_checksum_address(account.address)
     except Exception as e:
-        raise RuntimeError(
-            f"Invalid SEPOLIA_PRIVATE_KEY: {str(e)}"
-        )
+        raise RuntimeError(f"Invalid SEPOLIA_PRIVATE_KEY: {str(e)}")
 
 
 def get_backend_signer():
-    """
-    Return the Web3 account object used to sign
-    Sepolia blockchain transactions.
-    """
-
     if not SEPOLIA_PRIVATE_KEY:
-        raise RuntimeError(
-            "SEPOLIA_PRIVATE_KEY is not configured."
-        )
+        raise RuntimeError("SEPOLIA_PRIVATE_KEY is not configured.")
 
     try:
-        return w3.eth.account.from_key(
-            SEPOLIA_PRIVATE_KEY
-        )
-
+        return w3.eth.account.from_key(SEPOLIA_PRIVATE_KEY)
     except Exception as e:
-        raise RuntimeError(
-            f"Unable to load signing account: {str(e)}"
-        )
+        raise RuntimeError(f"Unable to load signing account: {str(e)}")
 
 
 def send_signed_transaction(transaction):
-    """
-    Sign and send a blockchain transaction using
-    the backend deployment wallet.
-    """
-
     signer = get_backend_signer()
-
-    signed_transaction = signer.sign_transaction(
-        transaction
-    )
-
-    tx_hash = w3.eth.send_raw_transaction(
-        signed_transaction.raw_transaction
-    )
-
+    signed_transaction = signer.sign_transaction(transaction)
+    tx_hash = w3.eth.send_raw_transaction(signed_transaction.raw_transaction)
     return tx_hash
 
 
@@ -117,9 +70,18 @@ app = FastAPI(
 # ============================================
 # CORS CONFIGURATION
 # ============================================
+# Allow both local development and the deployed
+# Vercel frontend.
+# ============================================
+
+ALLOWED_ORIGINS = [
+    "https://land-chain-sepia.vercel.app",
+    "https://land-chain-4ygibvkil-shivamkabugade2006-gmailcoms-projects.vercel.app",
+]
 
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
     allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
@@ -131,14 +93,8 @@ app.add_middleware(
 # DOCUMENT STORAGE
 # ============================================
 
-DOCUMENT_FOLDER = (
-    Path(__file__).parent / "../documents"
-).resolve()
-
-DOCUMENT_FOLDER.mkdir(
-    parents=True,
-    exist_ok=True
-)
+DOCUMENT_FOLDER = (Path(__file__).parent / "../documents").resolve()
+DOCUMENT_FOLDER.mkdir(parents=True, exist_ok=True)
 
 
 # ============================================
@@ -178,9 +134,7 @@ def root():
 
 @app.get("/health")
 def health():
-    return {
-        "status": "healthy"
-    }
+    return {"status": "healthy"}
 
 
 # ============================================
@@ -188,26 +142,14 @@ def health():
 # ============================================
 
 @app.post("/documents/hash")
-async def generate_document_hash(
-    file: UploadFile = File(...)
-):
-
+async def generate_document_hash(file: UploadFile = File(...)):
     if not file.filename:
-        raise HTTPException(
-            status_code=400,
-            detail="No file selected"
-        )
+        raise HTTPException(status_code=400, detail="No file selected")
 
     contents = await file.read()
+    document_hash = sha256(contents).hexdigest()
 
-    document_hash = sha256(
-        contents
-    ).hexdigest()
-
-    file_path = (
-        DOCUMENT_FOLDER / file.filename
-    )
-
+    file_path = DOCUMENT_FOLDER / file.filename
     with open(file_path, "wb") as buffer:
         buffer.write(contents)
 
@@ -227,7 +169,6 @@ async def generate_document_hash(
 
 @app.get("/blockchain/status")
 def get_blockchain_status():
-
     return blockchain_status()
 
 
@@ -237,27 +178,10 @@ def get_blockchain_status():
 
 @app.post("/lands/register")
 def register_land(data: LandRegistration):
-
     try:
-
-        # ====================================
-        # GET BACKEND WALLET
-        # ====================================
-
         owner_account = get_backend_account()
 
-        # ====================================
-        # GET NONCE
-        # ====================================
-
-        nonce = w3.eth.get_transaction_count(
-            owner_account,
-            "pending"
-        )
-
-        # ====================================
-        # BUILD TRANSACTION
-        # ====================================
+        nonce = w3.eth.get_transaction_count(owner_account, "pending")
 
         transaction = land_registry.functions.registerLand(
             data.land_id,
@@ -271,28 +195,10 @@ def register_land(data: LandRegistration):
             "gasPrice": w3.eth.gas_price
         })
 
-        # ====================================
-        # SIGN AND SEND
-        # ====================================
-
-        tx_hash = send_signed_transaction(
-            transaction
-        )
-
-        # ====================================
-        # WAIT FOR CONFIRMATION
-        # ====================================
-
-        receipt = w3.eth.wait_for_transaction_receipt(
-            tx_hash
-        )
-
-        # ====================================
-        # CHECK TRANSACTION STATUS
-        # ====================================
+        tx_hash = send_signed_transaction(transaction)
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
 
         if receipt.status != 1:
-
             return {
                 "status": "error",
                 "message": "Blockchain transaction reverted",
@@ -311,11 +217,7 @@ def register_land(data: LandRegistration):
         }
 
     except Exception as e:
-
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        return {"status": "error", "message": str(e)}
 
 
 # ============================================
@@ -324,12 +226,8 @@ def register_land(data: LandRegistration):
 
 @app.get("/lands/{land_id}")
 def get_land(land_id: int):
-
     try:
-
-        land = land_registry.functions.getLand(
-            land_id
-        ).call()
+        land = land_registry.functions.getLand(land_id).call()
 
         return {
             "status": "success",
@@ -342,11 +240,7 @@ def get_land(land_id: int):
         }
 
     except Exception as e:
-
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        return {"status": "error", "message": str(e)}
 
 
 # ============================================
@@ -355,93 +249,37 @@ def get_land(land_id: int):
 
 @app.post("/lands/transfer")
 def transfer_land(data: OwnershipTransfer):
-
     try:
-
-        # ====================================
-        # GET BACKEND WALLET
-        # ====================================
-
         current_owner = get_backend_account()
 
-        # ====================================
-        # VALIDATE NEW OWNER ADDRESS
-        # ====================================
-
         if not Web3.is_address(data.new_owner):
+            raise HTTPException(status_code=400, detail="Invalid Ethereum address")
 
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid Ethereum address"
-            )
-
-        new_owner = Web3.to_checksum_address(
-            data.new_owner
-        )
-
-        # ====================================
-        # PREVENT SAME OWNER TRANSFER
-        # ====================================
+        new_owner = Web3.to_checksum_address(data.new_owner)
 
         if new_owner.lower() == current_owner.lower():
-
             raise HTTPException(
                 status_code=400,
                 detail="New owner must be different from current owner"
             )
 
-        # ====================================
-        # CHECK LAND
-        # ====================================
-
-        land = land_registry.functions.getLand(
-            data.land_id
-        ).call()
+        land = land_registry.functions.getLand(data.land_id).call()
 
         if not land[5]:
+            raise HTTPException(status_code=404, detail="Land record does not exist")
 
-            raise HTTPException(
-                status_code=404,
-                detail="Land record does not exist"
-            )
-
-        # ====================================
-        # IMPORTANT OWNERSHIP CHECK
-        # ====================================
-        # The backend wallet can only perform the
-        # transfer if it is actually the current
-        # blockchain owner.
-        #
-        # This prevents the backend from attempting
-        # an invalid ownership transfer.
-
-        blockchain_owner = Web3.to_checksum_address(
-            land[3]
-        )
+        blockchain_owner = Web3.to_checksum_address(land[3])
 
         if blockchain_owner.lower() != current_owner.lower():
-
             raise HTTPException(
                 status_code=403,
                 detail=(
-                    "Unauthorized transfer. "
-                    "Backend wallet is not the current "
+                    "Unauthorized transfer. Backend wallet is not the current "
                     "blockchain owner of this property."
                 )
             )
 
-        # ====================================
-        # GET NONCE
-        # ====================================
-
-        nonce = w3.eth.get_transaction_count(
-            current_owner,
-            "pending"
-        )
-
-        # ====================================
-        # BUILD TRANSACTION
-        # ====================================
+        nonce = w3.eth.get_transaction_count(current_owner, "pending")
 
         transaction = land_registry.functions.transferOwnership(
             data.land_id,
@@ -454,28 +292,10 @@ def transfer_land(data: OwnershipTransfer):
             "gasPrice": w3.eth.gas_price
         })
 
-        # ====================================
-        # SIGN AND SEND
-        # ====================================
-
-        tx_hash = send_signed_transaction(
-            transaction
-        )
-
-        # ====================================
-        # WAIT FOR CONFIRMATION
-        # ====================================
-
-        receipt = w3.eth.wait_for_transaction_receipt(
-            tx_hash
-        )
-
-        # ====================================
-        # CHECK TRANSACTION STATUS
-        # ====================================
+        tx_hash = send_signed_transaction(transaction)
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
 
         if receipt.status != 1:
-
             return {
                 "status": "error",
                 "message": "Ownership transfer transaction reverted",
@@ -496,11 +316,7 @@ def transfer_land(data: OwnershipTransfer):
         raise
 
     except Exception as e:
-
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        return {"status": "error", "message": str(e)}
 
 
 # ============================================
@@ -509,17 +325,11 @@ def transfer_land(data: OwnershipTransfer):
 
 @app.get("/lands/{land_id}/history")
 def get_ownership_history(land_id: int):
-
     try:
-
-        history = land_registry.functions.getOwnershipHistory(
-            land_id
-        ).call()
+        history = land_registry.functions.getOwnershipHistory(land_id).call()
 
         records = []
-
         for record in history:
-
             records.append({
                 "owner": record[0],
                 "timestamp": record[1]
@@ -533,11 +343,7 @@ def get_ownership_history(land_id: int):
         }
 
     except Exception as e:
-
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        return {"status": "error", "message": str(e)}
 
 
 # ============================================
@@ -545,41 +351,13 @@ def get_ownership_history(land_id: int):
 # ============================================
 
 @app.post("/lands/{land_id}/verify-document")
-async def verify_document(
-    land_id: int,
-    file: UploadFile = File(...)
-):
-
+async def verify_document(land_id: int, file: UploadFile = File(...)):
     try:
-
-        # ====================================
-        # CHECK FILE
-        # ====================================
-
         if not file.filename:
-
-            raise HTTPException(
-                status_code=400,
-                detail="No file selected"
-            )
-
-        # ====================================
-        # READ DOCUMENT
-        # ====================================
+            raise HTTPException(status_code=400, detail="No file selected")
 
         contents = await file.read()
-
-        # ====================================
-        # GENERATE SHA-256 HASH
-        # ====================================
-
-        document_hash = sha256(
-            contents
-        ).hexdigest()
-
-        # ====================================
-        # VERIFY HASH AGAINST BLOCKCHAIN
-        # ====================================
+        document_hash = sha256(contents).hexdigest()
 
         is_genuine = land_registry.functions.verifyDocumentHash(
             land_id,
@@ -603,11 +381,7 @@ async def verify_document(
         raise
 
     except Exception as e:
-
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        return {"status": "error", "message": str(e)}
 
 
 # ============================================
@@ -616,29 +390,13 @@ async def verify_document(
 
 @app.get("/lands/{land_id}/verify")
 def verify_property(land_id: int):
-
     try:
-
-        # ====================================
-        # GET LAND
-        # ====================================
-
-        land = land_registry.functions.getLand(
-            land_id
-        ).call()
-
-        # ====================================
-        # GET OWNERSHIP HISTORY
-        # ====================================
-
-        history = land_registry.functions.getOwnershipHistory(
-            land_id
-        ).call()
+        land = land_registry.functions.getLand(land_id).call()
+        history = land_registry.functions.getOwnershipHistory(land_id).call()
 
         return {
             "status": "success",
             "verified": True,
-
             "property": {
                 "land_id": land[0],
                 "location": land[1],
@@ -647,17 +405,11 @@ def verify_property(land_id: int):
                 "registered_at": land[4],
                 "exists": land[5]
             },
-
             "ownership": {
                 "total_records": len(history),
                 "total_transfers": max(len(history) - 1, 0),
-                "current_owner": (
-                    history[-1][0]
-                    if history
-                    else land[3]
-                )
+                "current_owner": history[-1][0] if history else land[3]
             },
-
             "verification": {
                 "blockchain_record_exists": land[5],
                 "ownership_history_exists": len(history) > 0,
@@ -667,7 +419,6 @@ def verify_property(land_id: int):
         }
 
     except Exception as e:
-
         return {
             "status": "error",
             "verified": False,
