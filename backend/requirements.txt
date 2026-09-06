@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+web3
+python-multipart
+pydantic
