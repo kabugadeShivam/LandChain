@@ -6,7 +6,7 @@ from config import BLOCKCHAIN_RPC_URL, LAND_REGISTRY_ADDRESS
 
 
 # ============================================
-# CONNECT TO HARDHAT BLOCKCHAIN
+# CONNECT TO SEPOLIA BLOCKCHAIN
 # ============================================
 
 w3 = Web3(
@@ -18,17 +18,14 @@ w3 = Web3(
 # LOAD CONTRACT ABI
 # ============================================
 
-ABI_PATH = (
-    Path(__file__).parent
-    / "../blockchain/artifacts/contracts/LandRegistry.sol/LandRegistry.json"
-).resolve()
+# Render deploys the backend from the /backend directory.
+# Keep the ABI inside backend so the API does not depend
+# on Hardhat build artifacts being present on the server.
+ABI_PATH = Path(__file__).parent / "contract_abi.json"
 
 
-with open(ABI_PATH, "r") as file:
-    contract_data = json.load(file)
-
-
-CONTRACT_ABI = contract_data["abi"]
+with open(ABI_PATH, "r", encoding="utf-8") as file:
+    CONTRACT_ABI = json.load(file)
 
 
 # ============================================
