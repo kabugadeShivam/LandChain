@@ -2,10 +2,10 @@ import { useState } from "react";
 import { ethers } from "ethers";
 import "./index.css";
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = "https://landchain-gxyi.onrender.com";
 
 const LAND_REGISTRY_ADDRESS =
-  "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+  "0x0d4AbB070F0064cdf41dd3C1E3B503457786f116";
 
 // Minimal ABI needed by the frontend for MetaMask registration.
 const LAND_REGISTRY_ABI = [
@@ -206,9 +206,9 @@ function App() {
       const networkData = await provider.getNetwork();
       const chainId = networkData.chainId.toString();
 
-      if (chainId !== "31337") {
+      if (chainId !== "11155111") {
         throw new Error(
-          "Please switch MetaMask to Hardhat Local (Chain ID 31337) before registering the property."
+          "Please switch MetaMask to Sepolia (Chain ID 11155111) before registering the property."
         );
       }
 
@@ -238,7 +238,7 @@ function App() {
 
       if (balance === 0n) {
         throw new Error(
-          "Your MetaMask wallet has no ETH on Hardhat Local. Import or use a funded Hardhat account to pay the local transaction gas."
+          "Your MetaMask wallet has no Sepolia ETH. Please fund your Sepolia wallet to pay transaction gas."
         );
       }
 
@@ -966,7 +966,7 @@ function App() {
             <span>NETWORK</span>
 
             <strong>
-              {network || "Hardhat Local"}
+              {network || "Sepolia"}
             </strong>
           </div>
 
