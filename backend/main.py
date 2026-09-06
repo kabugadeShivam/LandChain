@@ -5,6 +5,7 @@ from pathlib import Path
 from datetime import datetime
 from pydantic import BaseModel
 from web3 import Web3
+import os
 
 from blockchain import (
     blockchain_status,
@@ -14,30 +15,92 @@ from blockchain import (
 
 
 # ============================================
-# HARDHAT LOCAL DEVELOPMENT ACCOUNT
+# SEPOLIA DEPLOYMENT WALLET
 # ============================================
-# Hardhat exposes its local accounts as unlocked JSON-RPC
-# accounts. We use Account #0 directly, so no private key
-# needs to be hard-coded in this backend.
+# The private key is NOT stored in this source file.
 #
-# This avoids private-key length/format errors and ensures
-# the backend always uses the Account #0 of the currently
-# running Hardhat node.
-HARDHAT_ACCOUNT_INDEX = 0
+# It must be provided through the environment variable:
+#
+# SEPOLIA_PRIVATE_KEY
+#
+# Example in PowerShell:
+#
+# $env:SEPOLIA_PRIVATE_KEY="YOUR_PRIVATE_KEY"
+#
+# NEVER commit the private key to GitHub.
+# NEVER send the private key to anyone.
+# ============================================
+
+SEPOLIA_PRIVATE_KEY = os.getenv("SEPOLIA_PRIVATE_KEY")
 
 
-def get_hardhat_account():
-    accounts = w3.eth.accounts
+def get_backend_account():
+    """
+    Load the backend signing wallet from the
+    SEPOLIA_PRIVATE_KEY environment variable.
+    """
 
-    if len(accounts) <= HARDHAT_ACCOUNT_INDEX:
+    if not SEPOLIA_PRIVATE_KEY:
         raise RuntimeError(
-            "Hardhat Account #0 is not available. "
-            "Make sure 'npx hardhat node' is running."
+            "SEPOLIA_PRIVATE_KEY is not configured. "
+            "Set the private key in the environment before "
+            "starting the backend."
         )
 
-    return Web3.to_checksum_address(
-        accounts[HARDHAT_ACCOUNT_INDEX]
+    try:
+        account = w3.eth.account.from_key(
+            SEPOLIA_PRIVATE_KEY
+        )
+
+        return Web3.to_checksum_address(
+            account.address
+        )
+
+    except Exception as e:
+        raise RuntimeError(
+            f"Invalid SEPOLIA_PRIVATE_KEY: {str(e)}"
+        )
+
+
+def get_backend_signer():
+    """
+    Return the Web3 account object used to sign
+    Sepolia blockchain transactions.
+    """
+
+    if not SEPOLIA_PRIVATE_KEY:
+        raise RuntimeError(
+            "SEPOLIA_PRIVATE_KEY is not configured."
+        )
+
+    try:
+        return w3.eth.account.from_key(
+            SEPOLIA_PRIVATE_KEY
+        )
+
+    except Exception as e:
+        raise RuntimeError(
+            f"Unable to load signing account: {str(e)}"
+        )
+
+
+def send_signed_transaction(transaction):
+    """
+    Sign and send a blockchain transaction using
+    the backend deployment wallet.
+    """
+
+    signer = get_backend_signer()
+
+    signed_transaction = signer.sign_transaction(
+        transaction
     )
+
+    tx_hash = w3.eth.send_raw_transaction(
+        signed_transaction.raw_transaction
+    )
+
+    return tx_hash
 
 
 # ============================================
@@ -57,7 +120,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1):\d+$",
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -178,10 +241,19 @@ def register_land(data: LandRegistration):
     try:
 
         # ====================================
-        # GET HARDHAT ACCOUNT #0
+        # GET BACKEND WALLET
         # ====================================
 
-        owner_account = get_hardhat_account()
+        owner_account = get_backend_account()
+
+        # ====================================
+        # GET NONCE
+        # ====================================
+
+        nonce = w3.eth.get_transaction_count(
+            owner_account,
+            "pending"
+        )
 
         # ====================================
         # BUILD TRANSACTION
@@ -193,20 +265,17 @@ def register_land(data: LandRegistration):
             data.document_hash
         ).build_transaction({
             "from": owner_account,
-            "nonce": w3.eth.get_transaction_count(
-                owner_account
-            ),
+            "nonce": nonce,
+            "chainId": w3.eth.chain_id,
             "gas": 500000,
             "gasPrice": w3.eth.gas_price
         })
 
         # ====================================
-        # SEND TRANSACTION
+        # SIGN AND SEND
         # ====================================
-        # Hardhat local accounts are unlocked by the node,
-        # so the node can sign the transaction for Account #0.
 
-        tx_hash = w3.eth.send_transaction(
+        tx_hash = send_signed_transaction(
             transaction
         )
 
@@ -290,10 +359,10 @@ def transfer_land(data: OwnershipTransfer):
     try:
 
         # ====================================
-        # GET HARDHAT ACCOUNT #0
+        # GET BACKEND WALLET
         # ====================================
 
-        current_owner = get_hardhat_account()
+        current_owner = get_backend_account()
 
         # ====================================
         # VALIDATE NEW OWNER ADDRESS
@@ -322,6 +391,55 @@ def transfer_land(data: OwnershipTransfer):
             )
 
         # ====================================
+        # CHECK LAND
+        # ====================================
+
+        land = land_registry.functions.getLand(
+            data.land_id
+        ).call()
+
+        if not land[5]:
+
+            raise HTTPException(
+                status_code=404,
+                detail="Land record does not exist"
+            )
+
+        # ====================================
+        # IMPORTANT OWNERSHIP CHECK
+        # ====================================
+        # The backend wallet can only perform the
+        # transfer if it is actually the current
+        # blockchain owner.
+        #
+        # This prevents the backend from attempting
+        # an invalid ownership transfer.
+
+        blockchain_owner = Web3.to_checksum_address(
+            land[3]
+        )
+
+        if blockchain_owner.lower() != current_owner.lower():
+
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Unauthorized transfer. "
+                    "Backend wallet is not the current "
+                    "blockchain owner of this property."
+                )
+            )
+
+        # ====================================
+        # GET NONCE
+        # ====================================
+
+        nonce = w3.eth.get_transaction_count(
+            current_owner,
+            "pending"
+        )
+
+        # ====================================
         # BUILD TRANSACTION
         # ====================================
 
@@ -330,20 +448,17 @@ def transfer_land(data: OwnershipTransfer):
             new_owner
         ).build_transaction({
             "from": current_owner,
-            "nonce": w3.eth.get_transaction_count(
-                current_owner
-            ),
+            "nonce": nonce,
+            "chainId": w3.eth.chain_id,
             "gas": 500000,
             "gasPrice": w3.eth.gas_price
         })
 
         # ====================================
-        # SEND TRANSACTION
+        # SIGN AND SEND
         # ====================================
-        # Hardhat local accounts are unlocked by the node,
-        # so the node can sign the transaction for Account #0.
 
-        tx_hash = w3.eth.send_transaction(
+        tx_hash = send_signed_transaction(
             transaction
         )
 
@@ -414,7 +529,7 @@ def get_ownership_history(land_id: int):
             "status": "success",
             "land_id": land_id,
             "ownership_history": records,
-            "total_transfers": len(records) - 1
+            "total_transfers": max(len(records) - 1, 0)
         }
 
     except Exception as e:
@@ -535,8 +650,12 @@ def verify_property(land_id: int):
 
             "ownership": {
                 "total_records": len(history),
-                "total_transfers": len(history) - 1,
-                "current_owner": history[-1][0]
+                "total_transfers": max(len(history) - 1, 0),
+                "current_owner": (
+                    history[-1][0]
+                    if history
+                    else land[3]
+                )
             },
 
             "verification": {
