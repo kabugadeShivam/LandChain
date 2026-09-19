@@ -336,7 +336,13 @@ function App() {
       setOwnershipHistory(data);
     } catch (err) {
       console.error(err);
-      setHistoryError  const transferOwnership = async (event) => {
+      setHistoryError(err.message);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const transferOwnership = async (event) => {
     event.preventDefault();
 
     setTransferError("");
