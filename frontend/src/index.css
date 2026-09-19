@@ -2146,8 +2146,80 @@ button {
 }
 
 /* =========================
+   PROPERTY MAP
+========================= */
+
+.property-map-panel {
+  overflow: hidden;
+}
+
+.property-map-frame {
+  width: 100%;
+  height: 360px;
+  border: 1px solid #e5e9ee;
+  border-radius: 11px;
+  overflow: hidden;
+  background: #f7f9fb;
+}
+
+.property-map-frame iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.property-map-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-top: 13px;
+  padding: 13px 14px;
+  background: #f8f9fb;
+  border-radius: 9px;
+}
+
+.property-map-footer span {
+  display: block;
+  color: #a0a8b4;
+  font-size: 7px;
+  letter-spacing: 0.7px;
+}
+
+.property-map-footer strong {
+  display: block;
+  color: #47556a;
+  font-size: 9px;
+  margin-top: 5px;
+}
+
+.map-open-button {
+  color: #277c5b;
+  background: #eaf7f1;
+  border-radius: 7px;
+  padding: 9px 11px;
+  font-size: 9px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.map-open-button:hover {
+  background: #dff2e9;
+}
+
+.property-map-note {
+  color: #9aa3b1;
+  font-size: 8px;
+  line-height: 1.6;
+  margin-top: 9px;
+}
+
+/* =========================
    RESPONSIVE REGISTER
 ========================= */
+
 
 @media (max-width: 900px) {
   .registration-layout {
