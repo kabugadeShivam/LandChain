@@ -10,6 +10,7 @@ const LAND_REGISTRY_ADDRESS =
 // Minimal ABI needed by the frontend for MetaMask registration.
 const LAND_REGISTRY_ABI = [
   "function registerLand(uint256 _landId, string _location, string _documentHash) public",
+  "function transferOwnership(uint256 _landId, address _newOwner) public",
 ];
 
 function App() {
@@ -335,13 +336,7 @@ function App() {
       setOwnershipHistory(data);
     } catch (err) {
       console.error(err);
-      setHistoryError(err.message);
-    } finally {
-      setLoadingHistory(false);
-    }
-  };
-
-  const transferOwnership = async (event) => {
+      setHistoryError  const transferOwnership = async (event) => {
     event.preventDefault();
 
     setTransferError("");
@@ -362,34 +357,150 @@ function App() {
     setTransferring(true);
 
     try {
-      const response = await fetch(
-        `${API_URL}/lands/transfer`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            land_id: Number(transferLandId),
-            new_owner: newOwner.trim(),
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok || data.status !== "success") {
+      if (!window.ethereum) {
         throw new Error(
-          data.detail ||
-            data.message ||
-            "Unable to transfer property ownership."
+          "Please install MetaMask to transfer property ownership."
         );
       }
 
-      setTransferResult(data);
+      const provider = new ethers.BrowserProvider(
+        window.ethereum
+      );
+
+      const networkData = await provider.getNetwork();
+      const chainId = networkData.chainId.toString();
+
+      if (chainId !== "11155111") {
+        throw new Error(
+          "Please switch MetaMask to Sepolia (Chain ID 11155111) before transferring ownership."
+        );
+      }
+
+      const accounts = await provider.send(
+        "eth_requestAccounts",
+        []
+      );
+
+      if (!accounts || accounts.length === 0) {
+        throw new Error(
+          "Please connect the current property owner's MetaMask wallet."
+        );
+      }
+
+      const signer = await provider.getSigner();
+      const signerAddress = await signer.getAddress();
+
+      setWallet(signerAddress);
+      setNetwork(
+        `${networkData.name} • ${chainId}`
+      );
+
+      let newOwnerAddress;
+
+      try {
+        newOwnerAddress = ethers.getAddress(
+          newOwner.trim()
+        );
+      } catch {
+        throw new Error(
+          "Please enter a valid Ethereum wallet address."
+        );
+      }
+
+      const landResponse = await fetch(
+        `${API_URL}/lands/${transferLandId}`
+      );
+
+      const landData = await landResponse.json();
+
+      if (
+        !landResponse.ok ||
+        landData.status !== "success" ||
+        !landData.exists
+      ) {
+        throw new Error(
+          landData.message ||
+            landData.detail ||
+            "The property is not registered on the blockchain."
+        );
+      }
+
+      const blockchainOwner = ethers.getAddress(
+        landData.owner
+      );
+
+      if (
+        blockchainOwner.toLowerCase() !==
+        signerAddress.toLowerCase()
+      ) {
+        throw new Error(
+          "Unauthorized transfer. Connect the MetaMask wallet currently recorded as the property owner."
+        );
+      }
+
+      if (
+        newOwnerAddress.toLowerCase() ===
+        signerAddress.toLowerCase()
+      ) {
+        throw new Error(
+          "New owner must be different from the current owner."
+        );
+      }
+
+      const balance = await provider.getBalance(
+        signerAddress
+      );
+
+      if (balance === 0n) {
+        throw new Error(
+          "Your MetaMask wallet has no Sepolia ETH. Please fund it to pay transaction gas."
+        );
+      }
+
+      const landRegistry = new ethers.Contract(
+        LAND_REGISTRY_ADDRESS,
+        LAND_REGISTRY_ABI,
+        signer
+      );
+
+      // The current owner signs the transfer directly in MetaMask.
+      // The smart contract enforces: only the on-chain owner can transfer.
+      const transaction =
+        await landRegistry.transferOwnership(
+          Number(transferLandId),
+          newOwnerAddress
+        );
+
+      const receipt = await transaction.wait();
+
+      if (!receipt) {
+        throw new Error(
+          "The ownership transfer transaction was not confirmed."
+        );
+      }
+
+      const updatedLandResponse = await fetch(
+        `${API_URL}/lands/${transferLandId}`
+      );
+
+      const updatedLandData =
+        await updatedLandResponse.json();
+
+      setTransferResult({
+        status: "success",
+        message:
+          "Land ownership transferred successfully",
+        land_id: Number(transferLandId),
+        previous_owner: signerAddress,
+        new_owner: newOwnerAddress,
+        transaction_hash: transaction.hash,
+        block_number: receipt.blockNumber,
+        updated_owner:
+          updatedLandData.owner || newOwnerAddress,
+      });
+
       setHistoryLandId(transferLandId);
 
-      // Refresh the ownership timeline after a successful transfer.
       const historyResponse = await fetch(
         `${API_URL}/lands/${transferLandId}/history`
       );
@@ -403,9 +514,28 @@ function App() {
       ) {
         setOwnershipHistory(historyData);
       }
+
+      setNewOwner("");
     } catch (err) {
       console.error(err);
-      setTransferError(err.message);
+
+      if (
+        err?.code === 4001 ||
+        err?.code === "ACTION_REJECTED"
+      ) {
+        setTransferError(
+          "MetaMask transaction was rejected by the user."
+        );
+      } else if (err?.reason) {
+        setTransferError(err.reason);
+      } else if (err?.shortMessage) {
+        setTransferError(err.shortMessage);
+      } else {
+        setTransferError(
+          err?.message ||
+            "Blockchain ownership transfer failed."
+        );
+      }
     } finally {
       setTransferring(false);
     }
