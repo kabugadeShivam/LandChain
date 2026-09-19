@@ -1773,6 +1773,72 @@ function App() {
               </div>
             </div>
 
+            <div className="panel history-panel property-map-panel">
+              <div className="panel-header">
+                <div>
+                  <h3>Property Map</h3>
+
+                  <p>
+                    View the registered property location on an interactive map.
+                  </p>
+                </div>
+
+                <div className="history-blockchain-badge">
+                  ✓ Location Record
+                </div>
+              </div>
+
+              {propertyLocation ? (
+                <>
+                  <div className="property-map-frame">
+                    <iframe
+                      title={`Map for Land #${verifyLandId}`}
+                      src={`https://www.google.com/maps?q=${encodeURIComponent(
+                        propertyLocation
+                      )}&output=embed`}
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                    ></iframe>
+                  </div>
+
+                  <div className="property-map-footer">
+                    <div>
+                      <span>REGISTERED LOCATION</span>
+                      <strong>{propertyLocation}</strong>
+                    </div>
+
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                        propertyLocation
+                      )}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="map-open-button"
+                    >
+                      Open in Maps →
+                    </a>
+                  </div>
+
+                  <p className="property-map-note">
+                    Map position is based on the location text stored in the
+                    blockchain record. It does not represent an official cadastral
+                    boundary or survey measurement.
+                  </p>
+                </>
+              ) : (
+                <div className="history-empty">
+                  <div className="history-empty-icon">⌖</div>
+
+                  <h3>Location Not Available</h3>
+
+                  <p>
+                    This property record does not currently contain a map-ready
+                    location.
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div className="panel history-panel">
               <div className="panel-header">
                 <div>
