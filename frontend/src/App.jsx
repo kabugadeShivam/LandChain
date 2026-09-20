@@ -50,6 +50,7 @@ function App() {
   // Verify Property
   const [verifyLandId, setVerifyLandId] = useState("");
   const [verificationData, setVerificationData] = useState(null);
+  const [verificationMetadata, setVerificationMetadata] = useState(null);
   const [loadingVerification, setLoadingVerification] =
     useState(false);
   const [verificationError, setVerificationError] =
@@ -628,6 +629,7 @@ function App() {
 
     setVerificationError("");
     setVerificationData(null);
+    setVerificationMetadata(null);
 
     if (!verifyLandId) {
       setVerificationError("Please enter a Land ID.");
@@ -651,6 +653,19 @@ function App() {
       }
 
       setVerificationData(data);
+
+      try {
+        const metadataResponse = await fetch(
+          `${API_URL}/lands/${verifyLandId}/metadata`
+        );
+        const metadataData = await metadataResponse.json();
+
+        if (metadataResponse.ok && metadataData.exists) {
+          setVerificationMetadata(metadataData.metadata);
+        }
+      } catch (metadataError) {
+        console.warn("Land map metadata unavailable:", metadataError);
+      }
     } catch (err) {
       console.error(err);
       setVerificationError(err.message);
@@ -1934,16 +1949,51 @@ function App() {
 
               {propertyLocation ? (
                 <>
-                  <div className="property-map-frame">
-                    <iframe
-                      title={`Map for Land #${verifyLandId}`}
-                      src={`https://www.google.com/maps?q=${encodeURIComponent(
-                        propertyLocation
-                      )}&output=embed`}
-                      loading="lazy"
-                      referrerPolicy="no-referrer-when-downgrade"
-                    ></iframe>
-                  </div>
+                  {verificationMetadata?.boundary?.length >= 3 ? (
+                    <>
+                      <LandMap
+                        points={verificationMetadata.boundary}
+                        center={{
+                          lat: verificationMetadata.latitude,
+                          lng: verificationMetadata.longitude,
+                        }}
+                        readOnly
+                        height={420}
+                      />
+
+                      <div className="registration-review land-dimension-review">
+                        <div>
+                          <span>AREA</span>
+                          <strong>
+                            {Number(verificationMetadata.area_sq_m || 0).toFixed(2)} m²
+                          </strong>
+                        </div>
+                        <div>
+                          <span>ACRES</span>
+                          <strong>
+                            {Number(verificationMetadata.area_acres || 0).toFixed(4)}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>LENGTH × WIDTH</span>
+                          <strong>
+                            {verificationMetadata.length_m || 0} m × {verificationMetadata.width_m || 0} m
+                          </strong>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="property-map-frame">
+                      <iframe
+                        title={`Map for Land #${verifyLandId}`}
+                        src={`https://www.google.com/maps?q=${encodeURIComponent(
+                          propertyLocation
+                        )}&output=embed`}
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                      ></iframe>
+                    </div>
+                  )}
 
                   <div className="property-map-footer">
                     <div>
@@ -1964,9 +2014,9 @@ function App() {
                   </div>
 
                   <p className="property-map-note">
-                    Map position is based on the location text stored in the
-                    blockchain record. It does not represent an official cadastral
-                    boundary or survey measurement.
+                    The interactive boundary is the user-entered GPS polygon.
+                    It is for registry visualization and is not a substitute for
+                    an official cadastral survey or legal boundary.
                   </p>
                 </>
               ) : (
