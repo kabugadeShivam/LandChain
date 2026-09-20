@@ -62,6 +62,13 @@ export default function LandMap({
   const mapRef = useRef(null);
   const polygonRef = useRef(null);
   const geometryRef = useRef(null);
+  const pointsRef = useRef(points);
+  const onChangeRef = useRef(onChange);
+
+  useEffect(() => {
+    pointsRef.current = points;
+    onChangeRef.current = onChange;
+  }, [points, onChange]);
   const [mapError, setMapError] = useState("");
 
   useEffect(() => {
@@ -112,14 +119,14 @@ export default function LandMap({
             if (!event.latLng) return;
 
             const next = [
-              ...((onChange && points) || []),
+              ...pointsRef.current,
               {
                 lat: Number(event.latLng.lat().toFixed(7)),
                 lng: Number(event.latLng.lng().toFixed(7)),
               },
             ];
 
-            onChange?.(next);
+            onChangeRef.current?.(next);
           });
         }
       } catch (error) {
