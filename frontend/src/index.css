@@ -2360,3 +2360,85 @@ button {
     align-items: flex-start;
   }
 }
+
+/* Land dimensions + Google Maps */
+.land-map-wrapper {
+  margin-top: 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.land-map {
+  width: 100%;
+  min-height: 320px;
+}
+
+.land-map-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.map-clear-button {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  padding: 7px 11px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.map-clear-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.land-area-summary {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  padding: 12px 14px;
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.land-area-summary span {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: .08em;
+}
+
+.land-area-summary strong {
+  font-size: 14px;
+}
+
+.land-map-error {
+  min-height: 320px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  padding: 24px;
+  color: #475569;
+}
+
+.land-map-error p {
+  margin: 7px 0;
+}
+
+.land-dimension-review {
+  margin-top: 16px;
+}
+
+.property-map-panel .land-map-wrapper {
+  margin-top: 8px;
+}
+
