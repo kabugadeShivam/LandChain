@@ -1257,7 +1257,15 @@ function App() {
             </p>
 
             <small>
+              Area: {success.area_acres || "—"} acres • {success.area_sq_m || "—"} m²
+              <br />
               Transaction: {success.transaction_hash}
+              {!success.metadata_saved && (
+                <>
+                  <br />
+                  Map metadata could not be saved to the backend.
+                </>
+              )}
             </small>
           </div>
         </div>
