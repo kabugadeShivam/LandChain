@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ethers } from "ethers";
 import "./index.css";
+import LandMap from "./LandMap";
 
 const API_URL = "https://landchain-gxyi.onrender.com";
 
@@ -21,6 +22,11 @@ function App() {
   const [landId, setLandId] = useState("");
   const [location, setLocation] = useState("");
   const [document, setDocument] = useState(null);
+
+  // Land dimensions and geospatial boundary
+  const [lengthM, setLengthM] = useState("");
+  const [widthM, setWidthM] = useState("");
+  const [boundary, setBoundary] = useState([]);
 
   const [hash, setHash] = useState("");
   const [hashing, setHashing] = useState(false);
@@ -143,6 +149,35 @@ function App() {
     }
   };
 
+  const calculateBoundaryAreaSqM = (points) => {
+    if (!points || points.length < 3) return 0;
+
+    const earthRadius = 6378137;
+    const lat0 =
+      (points.reduce((sum, point) => sum + point.lat, 0) /
+        points.length) *
+      Math.PI /
+      180;
+
+    const projected = points.map((point) => ({
+      x: earthRadius * point.lng * Math.PI / 180 * Math.cos(lat0),
+      y: earthRadius * point.lat * Math.PI / 180,
+    }));
+
+    let area = 0;
+    for (let i = 0; i < projected.length; i += 1) {
+      const j = (i + 1) % projected.length;
+      area +=
+        projected[i].x * projected[j].y -
+        projected[j].x * projected[i].y;
+    }
+
+    return Math.abs(area / 2);
+  };
+
+  const boundaryAreaSqM = calculateBoundaryAreaSqM(boundary);
+  const boundaryAreaAcres = boundaryAreaSqM / 4046.8564224;
+
   const registerProperty = async (event) => {
     event.preventDefault();
 
@@ -161,6 +196,11 @@ function App() {
 
     if (!document) {
       setError("Please upload the land document.");
+      return;
+    }
+
+    if (boundary.length < 3) {
+      setError("Please mark at least 3 points on the Google Map to define the land boundary.");
       return;
     }
 
@@ -264,6 +304,36 @@ function App() {
         );
       }
 
+      const firstPoint = boundary[0];
+
+      const metadataPayload = {
+        land_id: Number(landId),
+        area_sq_m: Number(boundaryAreaSqM.toFixed(2)),
+        area_acres: Number(boundaryAreaAcres.toFixed(4)),
+        length_m: Number(lengthM || 0),
+        width_m: Number(widthM || 0),
+        latitude: firstPoint.lat,
+        longitude: firstPoint.lng,
+        boundary,
+      };
+
+      let metadataSaved = false;
+
+      try {
+        const metadataResponse = await fetch(
+          `${API_URL}/lands/${landId}/metadata`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(metadataPayload),
+          }
+        );
+
+        metadataSaved = metadataResponse.ok;
+      } catch (metadataError) {
+        console.warn("Land metadata could not be saved:", metadataError);
+      }
+
       const data = {
         status: "success",
         land_id: Number(landId),
@@ -272,6 +342,9 @@ function App() {
         owner: signerAddress,
         transaction_hash: transaction.hash,
         block_number: receipt.blockNumber,
+        area_sq_m: metadataPayload.area_sq_m,
+        area_acres: metadataPayload.area_acres,
+        metadata_saved: metadataSaved,
       };
 
       setSuccess(data);
@@ -280,6 +353,9 @@ function App() {
       setLocation("");
       setDocument(null);
       setHash("");
+      setLengthM("");
+      setWidthM("");
+      setBoundary([]);
     } catch (err) {
       console.error(err);
 
@@ -1318,6 +1394,74 @@ function App() {
               </div>
             )}
           </div>
+
+          <div className="form-divider"></div>
+
+          <div className="form-section">
+            <div className="form-section-title">
+              <div className="form-number">02</div>
+              <div>
+                <h3>Land Dimensions & Boundary</h3>
+                <p>
+                  Enter dimensions and click the satellite map to mark the
+                  property boundary.
+                </p>
+              </div>
+            </div>
+
+            <div className="form-grid">
+              <div className="form-group">
+                <label>Length (metres)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="e.g. 200"
+                  value={lengthM}
+                  onChange={(e) => setLengthM(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Width (metres)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="e.g. 100"
+                  value={widthM}
+                  onChange={(e) => setWidthM(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <LandMap
+              points={boundary}
+              onChange={setBoundary}
+              center={boundary[0] || undefined}
+            />
+
+            {boundary.length >= 3 && (
+              <div className="registration-review land-dimension-review">
+                <div>
+                  <span>CALCULATED AREA</span>
+                  <strong>{boundaryAreaSqM.toFixed(2)} m²</strong>
+                </div>
+                <div>
+                  <span>AREA IN ACRES</span>
+                  <strong>{boundaryAreaAcres.toFixed(4)}</strong>
+                </div>
+                <div>
+                  <span>GPS CENTER</span>
+                  <strong>
+                    {boundary[0].lat.toFixed(6)}, {boundary[0].lng.toFixed(6)}
+                  </strong>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="form-divider"></div>
 
           <div className="form-divider"></div>
 
