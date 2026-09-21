@@ -5,7 +5,7 @@ const DEFAULT_CENTER = { lat: 18.9892, lng: 73.1175 };
 let googleMapsPromise = null;
 
 function loadGoogleMaps() {
-  if (window.google?.maps?.importLibrary) {
+  if (window.google?.maps?.Map && window.google?.maps?.Polygon) {
     return Promise.resolve(window.google.maps);
   }
 
@@ -25,10 +25,24 @@ function loadGoogleMaps() {
     );
 
     if (existing) {
-      existing.addEventListener("load", () => resolve(window.google.maps));
-      existing.addEventListener("error", () =>
-        reject(new Error("Google Maps failed to load."))
-      );
+      const finish = () => {
+        if (window.google?.maps?.Map && window.google?.maps?.Polygon) {
+          resolve(window.google.maps);
+        } else {
+          reject(new Error("Google Maps loaded, but the Maps API is unavailable."));
+        }
+      };
+
+      if (window.google?.maps?.Map) {
+        finish();
+      } else {
+        existing.addEventListener("load", finish, { once: true });
+        existing.addEventListener(
+          "error",
+          () => reject(new Error("Google Maps failed to load.")),
+          { once: true }
+        );
+      }
       return;
     }
 
@@ -36,14 +50,25 @@ function loadGoogleMaps() {
     script.src =
       "https://maps.googleapis.com/maps/api/js?key=" +
       encodeURIComponent(apiKey) +
-      "&loading=async&v=weekly";
+      "&libraries=geometry&loading=async&v=weekly";
     script.async = true;
     script.defer = true;
     script.dataset.landchainGoogleMaps = "true";
 
-    script.onload = () => resolve(window.google.maps);
+    script.onload = () => {
+      if (window.google?.maps?.Map && window.google?.maps?.Polygon) {
+        resolve(window.google.maps);
+      } else {
+        reject(new Error("Google Maps loaded, but the Maps API is unavailable."));
+      }
+    };
+
     script.onerror = () =>
-      reject(new Error("Google Maps failed to load. Check the API key and billing configuration."));
+      reject(
+        new Error(
+          "Google Maps failed to load. Check the API key and billing configuration."
+        )
+      );
 
     document.head.appendChild(script);
   });
@@ -64,12 +89,12 @@ export default function LandMap({
   const geometryRef = useRef(null);
   const pointsRef = useRef(points);
   const onChangeRef = useRef(onChange);
+  const [mapError, setMapError] = useState("");
 
   useEffect(() => {
     pointsRef.current = points;
     onChangeRef.current = onChange;
   }, [points, onChange]);
-  const [mapError, setMapError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -81,18 +106,10 @@ export default function LandMap({
         const googleMaps = await loadGoogleMaps();
         if (cancelled || !mapElementRef.current) return;
 
-        const { Map } = await googleMaps.importLibrary("maps");
-        const { Polygon } = await googleMaps.importLibrary("maps");
-        const { spherical } = await googleMaps.importLibrary("geometry");
-
-        geometryRef.current = spherical;
-
         const initialCenter =
-          points.length > 0
-            ? points[0]
-            : center || DEFAULT_CENTER;
+          points.length > 0 ? points[0] : center || DEFAULT_CENTER;
 
-        const map = new Map(mapElementRef.current, {
+        const map = new googleMaps.Map(mapElementRef.current, {
           center: initialCenter,
           zoom: points.length ? 17 : 15,
           mapTypeId: "satellite",
@@ -104,8 +121,9 @@ export default function LandMap({
         });
 
         mapRef.current = map;
+        geometryRef.current = googleMaps.geometry?.spherical || null;
 
-        polygonRef.current = new Polygon({
+        polygonRef.current = new googleMaps.Polygon({
           paths: points,
           map,
           clickable: false,
