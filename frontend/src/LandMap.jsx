@@ -24,15 +24,19 @@ function loadGoogleMaps() {
       'script[data-landchain-google-maps="true"]'
     );
 
-    if (existing) {
-      const finish = () => {
-        if (window.google?.maps?.Map && window.google?.maps?.Polygon) {
-          resolve(window.google.maps);
-        } else {
-          reject(new Error("Google Maps loaded, but the Maps API is unavailable."));
-        }
-      };
+    const finish = () => {
+      if (window.google?.maps?.Map && window.google?.maps?.Polygon) {
+        resolve(window.google.maps);
+      } else {
+        reject(
+          new Error(
+            "Google Maps script loaded, but the Maps JavaScript API did not initialize. Check the API key restrictions and enabled APIs."
+          )
+        );
+      }
+    };
 
+    if (existing) {
       if (window.google?.maps?.Map) {
         finish();
       } else {
@@ -50,19 +54,12 @@ function loadGoogleMaps() {
     script.src =
       "https://maps.googleapis.com/maps/api/js?key=" +
       encodeURIComponent(apiKey) +
-      "&libraries=geometry&loading=async&v=weekly";
+      "&libraries=geometry&v=weekly";
     script.async = true;
     script.defer = true;
     script.dataset.landchainGoogleMaps = "true";
 
-    script.onload = () => {
-      if (window.google?.maps?.Map && window.google?.maps?.Polygon) {
-        resolve(window.google.maps);
-      } else {
-        reject(new Error("Google Maps loaded, but the Maps API is unavailable."));
-      }
-    };
-
+    script.onload = finish;
     script.onerror = () =>
       reject(
         new Error(
